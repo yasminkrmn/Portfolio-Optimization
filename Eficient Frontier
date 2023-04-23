@@ -1,0 +1,76 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+class EfficientFrontier:
+    def __init__(self, tickers, start_date, finish_date, num_portfolios, plot=True):
+        self.tickers = tickers
+        self.start_date = start_date
+        self.finish_date = finish_date
+        self.num_portfolios = num_portfolios
+        self.plot = plot
+        
+        # load price data from Yahoo Finance
+        self.prices = yf.download(tickers, start=start_date, end=finish_date)['Adj Close']
+            
+    def generate_portfolios(self):
+        # calculate returns
+        returns = np.log(self.prices / self.prices.shift(1))
+        
+        # calculate mean returns and covariance matrix
+        mean_returns = returns.mean()
+        cov_matrix = returns.cov()
+        
+        # generate random portfolios
+        results = np.zeros((3+len(self.tickers), self.num_portfolios))
+        for i in range(self.num_portfolios):
+            # generate random weights
+            weights = np.random.random(len(self.tickers))
+            weights /= np.sum(weights)
+            
+            # calculate portfolio metrics
+            portfolio_return = np.sum(mean_returns * weights) * 252
+            portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights))) * np.sqrt(252)
+            portfolio_sharpe_ratio = portfolio_return / portfolio_volatility
+            
+            # save results
+            results[0,i] = portfolio_return
+            results[1,i] = portfolio_volatility
+            results[2,i] = portfolio_sharpe_ratio
+            for j in range(len(weights)):
+                results[j+3,i] = weights[j]
+                
+        # convert results to DataFrame
+        columns = ['return', 'volatility', 'sharpe_ratio'] + self.tickers
+        results_df = pd.DataFrame(results.T, columns=columns)
+        
+        # find portfolio with highest Sharpe ratio
+        max_sharpe_port = results_df.iloc[results_df['sharpe_ratio'].idxmax()]
+        
+        # find portfolio with minimum volatility
+        min_vol_port = results_df.iloc[results_df['volatility'].idxmin()]
+        
+        # return results
+        return results_df, max_sharpe_port, min_vol_port
+        
+    def plot_efficient_frontier(self):
+        # generate portfolios and extract results
+        results_df, max_sharpe_port, min_vol_port = self.generate_portfolios()
+        
+        # print results
+        print("Results DataFrame:\n", results_df)
+        print("Portfolio with Maximum Sharpe Ratio:\n", max_sharpe_port)
+        print("Portfolio with Minimum Volatility:\n", min_vol_port)
+        
+        # plot efficient frontier
+        fig, ax = plt.subplots()
+        ax.scatter(results_df['volatility'], results_df['return'], c=results_df['sharpe_ratio'], cmap='viridis')
+        ax.scatter(max_sharpe_port['volatility'], max_sharpe_port['return'], marker='*', s=500, label='Maximum Sharpe ratio', color='r')
+        ax.scatter(min_vol_port['volatility'], min_vol_port['return'], marker='*', s=500, label='Minimum volatility', color='g')
+        ax.set_xlabel('Volatility')
+        ax.set_ylabel('Return')
+        ax.legend()
+        
+        # show plot
+        plt.show()
